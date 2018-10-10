@@ -27,3 +27,48 @@ echo "Setting up Jenkins in project ${GUID}-jenkins from Git Repo ${REPO} for Cl
 # * CLUSTER: the base url of the cluster used (e.g. na39.openshift.opentlc.com)
 
 # To be Implemented by Student
+
+oc policy add-role-to-user edit system:serviceaccount:$GUID-jenkins:jenkins -n $GUID-jenkins
+oc policy add-role-to-user edit system:serviceaccount:gpte-jenkins:jenkins -n $GUID-jenkins
+
+oc new-app jenkins-persistent --param ENABLE_OAUTH=true --param MEMORY_LIMIT=4Gi --param VOLUME_CAPACITY=4Gi -n ${GUID}-jenkins
+oc rollout pause dc jenkins -n ${GUID}-jenkins
+oc set resources dc jenkins --limits=memory=4Gi,cpu=4 --requests=memory=2Gi,cpu=3 -n ${GUID}-jenkins
+oc rollout resume dc jenkins -n ${GUID}-jenkins
+
+while : ; do
+    oc get pod -n ${GUID}-jenkins | grep -v deploy | grep "1/1"
+    if [ $? == "1" ] 
+      then 
+        sleep 10
+      else 
+        break 
+    fi
+done
+
+oc new-build --name=jenkins-slave-appdev \
+    --dockerfile="$(< ./Infrastructure/templates/docker/skopeo/Dockerfile)" \
+    -n $GUID-jenkins
+
+while : ; do
+    oc get pod -n ${GUID}-jenkins | grep 'slave' | grep "Completed"
+    if [ $? == "0" ]
+      then
+        echo 'jenkins-slave-appdev build completed'
+        break
+      else
+        echo 'jenkins-slave-appdev building sleep 10'
+        sleep 10
+    fi
+done
+
+
+oc create configmap basic-config --from-literal="GUID=${GUID}" --from-literal="REPO=${REPO}" --from-literal="CLUSTER=${CLUSTER}"
+
+oc create -f Infrastructure/templates/bc-mlbparks.yaml -n ${GUID}-jenkins
+oc create -f Infrastructure/templates/bc-nationalparks.yaml -n ${GUID}-jenkins
+oc create -f Infrastructure/templates/bc-parksmap.yaml -n ${GUID}-jenkins
+
+oc set env bc/mlbparks-pipeline GUID=${GUID} REPO=${REPO} CLUSTER=${CLUSTER} -n ${GUID}-jenkins
+oc set env bc/nationalparks-pipeline GUID=${GUID} REPO=${REPO} CLUSTER=${CLUSTER} -n ${GUID}-jenkins
+oc set env bc/parksmap-pipeline GUID=${GUID} REPO=${REPO} CLUSTER=${CLUSTER} -n ${GUID}-jenkins
