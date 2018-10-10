@@ -7,7 +7,7 @@ spec:
     contextDir: ParksMap
     type: Git
     git:
-      uri: "https://github.com/fmol2y/advdev_homework_template.git"
+      uri: "https://github.com/nenadmudri/adv_homework.git"
       ref: "master"
   strategy:
     jenkinsPipelineStrategy:
